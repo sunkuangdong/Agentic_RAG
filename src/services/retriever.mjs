@@ -37,14 +37,13 @@ async function getVectorStore(question) {
                 },
             }
         );
-        console.log('Successfully connected to Milvus database!');
-
         // To avoid the error: "Invalid search params: invalid json string"
         vectorStore.indexSearchParams = {
             metric_type: "COSINE",
             params: JSON.stringify({ ef: 64 }),
         }
         // To avoid the error: "Invalid search params: invalid json string"
+        console.log('Successfully connected to Milvus database!');
     
         try {
             await vectorStore.client.loadCollection({ collection_name: COLLECTION_NAME });
@@ -86,39 +85,46 @@ async function retrieveRelevantContent(question, k = TOP_K) {
     }
 }
 
-async function getResult(graph, question, k = TOP_K, documents = [], generation = '') {
+async function getResult(graph, question, k = TOP_K, documents = [], generation = '', strategy = '', routeReason = '') {
     const result = await graph.invoke(
         {
             question: question,
             k: k,
+            strategy: strategy,
+            routeReason: routeReason,
             documents: documents,
             generation: generation,
         }
     );
     console.log("\n[Retrieved Relevant Content]");
-    if (result.documents.length === 0) {
-        console.log("No relevant content found.");
-        console.log("\n[AI Response]");
-        console.log("Sorry, I couldn't find any relevant content about Demi-Gods and Semi-Devils.");
-        return;
+    if (strategy === "complex") {
+        console.log("Complex strategy used.");
+        if (result.documents.length === 0) {
+            console.log("No relevant content found.");
+            console.log("\n[AI Response]");
+            console.log("Sorry, I couldn't find any relevant content about Demi-Gods and Semi-Devils.");
+            return;
+        } else {
+            result.documents.forEach((item, i) => {
+                console.log(`\n[Snippet ${i + 1}] Similarity: ${item.score.toFixed(4)}`);
+                console.log(`Book: ${item.bookId}`);
+                console.log(`Chapter: ${item.chapter_num}`);
+                console.log(`Index: ${item.index}`);
+                console.log(
+                    `Content: ${item.content.substring(0, 200)}${item.content.length > 200 ? "..." : ""}`,
+                );
+            });
+        }
     } else {
-        result.documents.forEach((item, i) => {
-            console.log(`\n[Snippet ${i + 1}] Similarity: ${item.score.toFixed(4)}`);
-            console.log(`Book: ${item.bookId}`);
-            console.log(`Chapter: ${item.chapter_num}`);
-            console.log(`Index: ${item.index}`);
-            console.log(
-                `Content: ${item.content.substring(0, 200)}${item.content.length > 200 ? "..." : ""}`,
-            );
-        });
+        console.log("Simple strategy used.");
     }
+    console.log(`Route Reason: ${routeReason}`);
+    console.log(`\n [final result strategy] ${result.strategy}`);
 
-    if (!result.generation) {
+    if (!result.generation.trim()) {
         console.log("\n[AI Response]");
         console.log("The model did not return any content.");
-    } else {
-        console.log("\n[AI Response]");
-        console.log(result.generation);
+        return;
     }
 }
 

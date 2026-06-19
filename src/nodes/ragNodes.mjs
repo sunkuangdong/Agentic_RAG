@@ -12,7 +12,7 @@ export const retrieveNode = async (state) => {
 }
 
 export const generateNode = async (state) => {
-    const { documents, question, k } = state;
+    const { documents, question, k, strategy, routeReason } = state;
     console.log("documents: ", documents);
     const context = documents.map(
         (item, index) => `[Snippet ${index + 1}]
@@ -50,7 +50,9 @@ export const generateNode = async (state) => {
     process.stdout.write("\n");
     return {
         question: question,
+        strategy: strategy,
         documents: documents,
+        routeReason: routeReason,
         k: k,
         generation: generation,
     };
