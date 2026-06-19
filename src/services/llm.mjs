@@ -10,8 +10,12 @@ const model = new ChatOpenAI({
 });
 
 const embeddings = new OpenAIEmbeddings({
-    model: process.env.OPENAI_EMBEDDING_MODEL,
-    dimensions: 1024,
+    model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+    dimensions: 768,
+    configuration: {
+        apiKey: process.env.OPENAI_API_KEY,
+        baseURL: process.env.OPENAI_BASE_URL,
+    },
 });
 
 export { model, embeddings };

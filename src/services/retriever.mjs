@@ -9,7 +9,7 @@ let vectorStore = null;
  * Get or initialize the Milvus vector database instance
  * @returns {Promise<Milvus>} 
  */
-async function getVectorStore() {
+async function getVectorStore(question) {
     if (vectorStore) {
         return vectorStore;
     }
@@ -20,9 +20,8 @@ async function getVectorStore() {
         vectorStore = await Milvus.fromExistingCollection(
             embeddings, 
             {
-                collection_name: COLLECTION_NAME,
-                host: process.env.MILVUS_HOST,
-                port: process.env.MILVUS_PORT,
+                collectionName: COLLECTION_NAME,
+                url: process.env.MILVUS_URL || "http://localhost:19530",
                 textField: "content",
                 primaryField: "id",
                 indexCreateOptions: {
@@ -39,23 +38,37 @@ async function getVectorStore() {
             }
         );
         console.log('Successfully connected to Milvus database!');
+
+        // To avoid the error: "Invalid search params: invalid json string"
         vectorStore.indexSearchParams = {
             metric_type: "COSINE",
             params: JSON.stringify({ ef: 64 }),
         }
+        // To avoid the error: "Invalid search params: invalid json string"
+    
+        try {
+            await vectorStore.client.loadCollection({ collection_name: COLLECTION_NAME });
+            console.log(`✓ Collection ${COLLECTION_NAME} is loaded\n`);
+        } catch (error) {
+            if (!error.message.includes("already loaded")) {
+                throw error;
+            }
+            console.log(`✓ Collection ${COLLECTION_NAME} is already loaded\n`);
+        }
+        console.log("=".repeat(100));
+        console.log("question: ", question);
+        console.log("=".repeat(100));
         return vectorStore;
     } catch (error) {
         console.error('Failed to connect to Milvus database:', error);
         throw error;
     }
-
-    
 }
 
 async function retrieveRelevantContent(question, k = TOP_K) {
     try {
         // Ensure the database instance is retrieved before searching
-        const store = await getVectorStore();
+        const store = await getVectorStore(question);
         const docsWithScores = await store.similaritySearchWithScore(question, k);
         
         return docsWithScores.map(([doc, score]) => ({
@@ -73,4 +86,40 @@ async function retrieveRelevantContent(question, k = TOP_K) {
     }
 }
 
-export { getVectorStore, retrieveRelevantContent };
+async function getResult(graph, question, k = TOP_K, documents = [], generation = '') {
+    const result = await graph.invoke(
+        {
+            question: question,
+            k: k,
+            documents: documents,
+            generation: generation,
+        }
+    );
+    console.log("\n[Retrieved Relevant Content]");
+    if (result.documents.length === 0) {
+        console.log("No relevant content found.");
+        console.log("\n[AI Response]");
+        console.log("Sorry, I couldn't find any relevant content about Demi-Gods and Semi-Devils.");
+        return;
+    } else {
+        result.documents.forEach((item, i) => {
+            console.log(`\n[Snippet ${i + 1}] Similarity: ${item.score.toFixed(4)}`);
+            console.log(`Book: ${item.bookId}`);
+            console.log(`Chapter: ${item.chapter_num}`);
+            console.log(`Index: ${item.index}`);
+            console.log(
+                `Content: ${item.content.substring(0, 200)}${item.content.length > 200 ? "..." : ""}`,
+            );
+        });
+    }
+
+    if (!result.generation) {
+        console.log("\n[AI Response]");
+        console.log("The model did not return any content.");
+    } else {
+        console.log("\n[AI Response]");
+        console.log(result.generation);
+    }
+}
+
+export { getVectorStore, retrieveRelevantContent, getResult };
