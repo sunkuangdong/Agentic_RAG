@@ -1,25 +1,26 @@
 import { retrieveRelevantContent, mergeUnique } from '../services/retriever.mjs';
 import { model } from '../services/llm.mjs';
+import { answerLanguageInstruction } from '../utils/language.mjs';
 
 export const retrieveNode = async (state) => {
     const subs = state.subQuestions ?? [];
     const idx = state.nextSubIdx ?? 0;
     const q = subs[idx]?.trim();
     if (!q) {
-        throw new Error(`retrieve: 子问题下标 ${idx} 无有效文本（共 ${subs.length} 条）`);
+        throw new Error(`retrieve: no valid sub-question at index ${idx} (total ${subs.length})`);
     }
 
     const round = (state.retrievalCount ?? 0) + 1;
-    console.log(`---RETRIEVE (第 ${round} 轮，子问题 ${idx + 1}/${subs.length})---`);
-    console.log(`查询: ${q}`);
+    console.log(`---RETRIEVE (round ${round}, sub-question ${idx + 1}/${subs.length})---`);
+    console.log(`Query: ${q}`);
 
     const newDocs = await retrieveRelevantContent(q, state.k);
     const merged = mergeUnique(state.documents ?? [], newDocs);
 
     if (newDocs.length === 0) {
-        console.log("本轮未命中文档");
+        console.log("No documents matched this round");
     } else {
-        console.log(`本轮命中 ${newDocs.length} 条，累计去重后 ${merged.length} 条`);
+        console.log(`Matched ${newDocs.length} docs, ${merged.length} unique after merge`);
         newDocs.forEach((item, i) => {
             const preview =
                 item.content.length > 120 ? `${item.content.substring(0, 120)}...` : item.content;
@@ -39,31 +40,50 @@ export const retrieveNode = async (state) => {
 };
 
 export const generateNode = async (state) => {
-    const { documents, question, k, strategy, routeReason } = state;
-    console.log("documents: ", documents);
-    const context = documents.map(
-        (item, index) => `[Snippet ${index + 1}]
-            Chapter: ${item.chapter_num}
-            Content: ${item.content}`
-    ).join("\n\n ------- \n\n");
+    const { question, k, strategy, routeReason, localContext, webContext, evaluation } = state;
+    const parsed = (() => {
+        try {
+            return JSON.parse(evaluation || "{}");
+        } catch {
+            return {};
+        }
+    })();
+    const contextSufficient = parsed.enough === true;
 
-    const prompt = `你是一个专业的《天龙八部》小说助手。请根据小说内容，用准确、详细的中文回答问题。
+    const contextParts = [];
+    if (localContext?.trim()) {
+        contextParts.push(`[Local knowledge base]\n${localContext}`);
+    }
+    if (webContext?.trim()) {
+        contextParts.push(`[Web search results]\n${webContext}`);
+    }
+    const context = contextParts.join("\n\n---\n\n") || "(No relevant content retrieved)";
 
-        请根据以下《天龙八部》小说片段内容回答问题：
+    const insufficientNote = contextSufficient
+        ? ""
+        : `\nImportant: The evaluator determined the reference content is NOT sufficient to answer fully.
+        Missing points: ${(parsed.missing ?? []).join("; ") || "unknown"}
+        You MUST state clearly that the retrieved sources do not contain enough evidence. Do NOT use outside knowledge or guess.`;
+
+            const prompt = `You are a professional assistant for the novel "Demi-Gods and Semi-Devils" (天龙八部).
+        Answer using accurate, detailed language based only on the reference content below.
+
+        Reference content:
         ${context}
 
-        用户问题：${question}
+        User question: ${question}
+        ${insufficientNote}
 
-        回答要求：
-        1. 必须使用中文回答。
-        2. 如果片段中有相关信息，请结合小说内容给出详细、准确的回答。
-        3. 可以综合多个片段的内容，提供完整的答案。
-        4. 如果片段中没有相关信息，请如实告知用户。
-        5. 回答要准确，符合小说的情节和人物设定。
-        6. 可以引用原文内容来支持你的回答。
+        Requirements:
+        1. ${answerLanguageInstruction(question)}
+        2. If the reference content contains relevant information, provide a detailed and accurate answer.
+        3. You may synthesize multiple snippets into one complete answer.
+        4. If the reference content does not contain relevant information, say so honestly. Do not fabricate facts.
+        5. Keep the answer consistent with the novel's plot and characters.
+        6. You may quote the source text to support your answer.
 
-        AI 助手的回答：`;
-    
+        Assistant answer:`;
+
     process.stdout.write(`\n[AI stream response]\n`);
 
     let generation = '';
@@ -79,9 +99,10 @@ export const generateNode = async (state) => {
     return {
         question: question,
         strategy: strategy,
-        documents: documents,
         routeReason: routeReason,
         k: k,
         generation: generation,
+        webContext: webContext,
+        localContext: localContext,
     };
-}
+};

@@ -2,32 +2,32 @@ import 'dotenv/config';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { getVectorStore, getResult } from './services/retriever.mjs';
 import { GraphState } from './state/graphState.mjs';
-import { retrieveNode, generateNode } from './nodes/ragNodes.mjs';
-import { routeQuestionNode, directAnswerNode, decomposeQuestionNode, afterRoute, planNextStepNode, afterPlan } from './nodes/routeQuestionNode.mjs';
+import { generateNode } from './nodes/ragNodes.mjs';
+import { routeQuestionNode, directAnswerNode, retrieveLocalNode, evaluateNode, webRetrieveNode, afterRoute, afterEvaluateLocal } from './nodes/routeQuestionNode.mjs';
 
 const graph = new StateGraph(GraphState)
                 .addNode("route_question", routeQuestionNode)
                 .addNode('direct_answer', directAnswerNode)
-                .addNode('decompose_question', decomposeQuestionNode)
-                .addNode('retrieve', retrieveNode)
-                .addNode('plan_next_step', planNextStepNode)
+                .addNode("local_retrieve", retrieveLocalNode)
+                .addNode('evaluate_local', evaluateNode)
+                .addNode('web_search', webRetrieveNode)
                 .addNode('generate', generateNode)
                 .addEdge(START, 'route_question')
                 .addConditionalEdges("route_question", afterRoute, {
                     direct_answer: "direct_answer",
-                    decompose_question: "decompose_question",})
-                .addEdge('decompose_question', 'retrieve')
-                .addEdge('retrieve', 'plan_next_step')
-                .addConditionalEdges("plan_next_step", afterPlan, {
-                    retrieve: "retrieve",
+                    local_retrieve: "local_retrieve",})
+                .addEdge('local_retrieve', 'evaluate_local')
+                .addConditionalEdges("evaluate_local", afterEvaluateLocal, {
+                    web_search: "web_search",
                     generate: "generate",
                 })
+                .addEdge('web_search', 'evaluate_local')
                 .addEdge('direct_answer', END)
                 .addEdge('generate', END)
                 .compile();
 
 async function main() {
-    const question = "《天龙八部》中「四大恶人」排行第二的是谁？此人之子在身世揭晓前，其生父在武林中的公开身份是什么？";
+    const question = "Who is ranked second among the Four Great Evils in Demi-Gods and Semi-Devils? Before the child's parentage is revealed, what is the father's publicly known identity in the martial world?";
     const k_Args = 5;
 
     // Ensure the database connection is successful (optional, if you want to check the connection at startup)

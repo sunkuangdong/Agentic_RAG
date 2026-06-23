@@ -9,7 +9,7 @@ const model = new ChatOpenAI({
     },
 });
 
-// Embedding 与 Chat 分离：检索向量走 Ollama，与建库时 nomic-embed-text @ 768 一致
+// Chat and embedding use separate endpoints; retrieval vectors use Ollama to match the indexed collection
 const embeddings = new OpenAIEmbeddings({
     model: process.env.OPENAI_EMBEDDING_MODEL || process.env.EMBEDDINGS_MODEL_NAME || 'nomic-embed-text',
     dimensions: Number(process.env.OPENAI_EMBEDDING_DIMENSIONS) || 768,
