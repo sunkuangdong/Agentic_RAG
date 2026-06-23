@@ -27,8 +27,8 @@ const graph = new StateGraph(GraphState)
                 .compile();
 
 async function main() {
-    const question = "Who is ranked second among the Four Great Evils in Demi-Gods and Semi-Devils? Before the child's parentage is revealed, what is the father's publicly known identity in the martial world?";
-    const k_Args = 5;
+    const question = "《天龙八部》中「四大恶人」排行第二的是谁？此人之子在身世揭晓前，其生父在武林中的公开身份是什么？";
+    const k_Args = 8;
 
     // Ensure the database connection is successful (optional, if you want to check the connection at startup)
     await getVectorStore(question);
