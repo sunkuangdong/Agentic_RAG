@@ -22,6 +22,7 @@ async function getVectorStore(question) {
             {
                 collectionName: COLLECTION_NAME,
                 url: process.env.MILVUS_URL || "http://localhost:19530",
+                vectorField: "vector",
                 textField: "content",
                 primaryField: "id",
                 indexCreateOptions: {
@@ -64,6 +65,18 @@ async function getVectorStore(question) {
     }
 }
 
+function mergeUnique (existingDocs, newDocs) {
+    const map = new Map();
+    for ( const d of [...existingDocs, ...newDocs]) {
+        const key = String(d.id);
+        const prev = map.get(key);
+        if (!prev || Number(d.score) > Number(prev.score)) {
+            map.set(key, d);
+        }
+    }
+    return Array.from(map.values()).sort((a, b) => Number(b.score) - Number(a.score));
+}
+
 async function retrieveRelevantContent(question, k = TOP_K) {
     try {
         // Ensure the database instance is retrieved before searching
@@ -73,12 +86,12 @@ async function retrieveRelevantContent(question, k = TOP_K) {
         return docsWithScores.map(([doc, score]) => ({
             score,
             content: doc.pageContent,
-            metadata: doc.metadata ?? "unknown",
-            id: doc.id ?? "unknown",
-            bookId: doc.metadata.book_id ?? "unknown",
-            chapter_num: doc.metadata.chapter_num ?? "unknown",
-            index: doc.metadata.index ?? "unknown",
+            id: doc.metadata?.id ?? "unknown",
+            bookId: doc.metadata?.book_id ?? "unknown",
+            chapter_num: doc.metadata?.chapter_num ?? "unknown",
+            index: doc.metadata?.index ?? "unknown",
         }));
+
     } catch (error) {
         console.error('Error retrieving relevant content:', error);
         return [];
@@ -128,4 +141,4 @@ async function getResult(graph, question, k = TOP_K, documents = [], generation 
     }
 }
 
-export { getVectorStore, retrieveRelevantContent, getResult };
+export { getVectorStore, retrieveRelevantContent, mergeUnique, getResult };

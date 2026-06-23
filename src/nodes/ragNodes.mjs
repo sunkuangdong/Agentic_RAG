@@ -1,15 +1,42 @@
-import { retrieveRelevantContent } from '../services/retriever.mjs';
+import { retrieveRelevantContent, mergeUnique } from '../services/retriever.mjs';
 import { model } from '../services/llm.mjs';
 
 export const retrieveNode = async (state) => {
-    const { question, k } = state;
-    const documents = await retrieveRelevantContent(question, k);
+    const subs = state.subQuestions ?? [];
+    const idx = state.nextSubIdx ?? 0;
+    const q = subs[idx]?.trim();
+    if (!q) {
+        throw new Error(`retrieve: 子问题下标 ${idx} 无有效文本（共 ${subs.length} 条）`);
+    }
+
+    const round = (state.retrievalCount ?? 0) + 1;
+    console.log(`---RETRIEVE (第 ${round} 轮，子问题 ${idx + 1}/${subs.length})---`);
+    console.log(`查询: ${q}`);
+
+    const newDocs = await retrieveRelevantContent(q, state.k);
+    const merged = mergeUnique(state.documents ?? [], newDocs);
+
+    if (newDocs.length === 0) {
+        console.log("本轮未命中文档");
+    } else {
+        console.log(`本轮命中 ${newDocs.length} 条，累计去重后 ${merged.length} 条`);
+        newDocs.forEach((item, i) => {
+            const preview =
+                item.content.length > 120 ? `${item.content.substring(0, 120)}...` : item.content;
+            console.log(
+                `[R${i + 1}] score=${Number(item.score).toFixed(4)} chapter=${item.chapter_num} index=${item.index}`,
+            );
+            console.log(`      ${preview}`);
+        });
+    }
+
     return {
-        question,
-        k,
-        documents,
+        documents: merged,
+        retrievalCount: round,
+        nextSubIdx: idx + 1,
+        currentQuery: q,
     };
-}
+};
 
 export const generateNode = async (state) => {
     const { documents, question, k, strategy, routeReason } = state;
@@ -20,21 +47,22 @@ export const generateNode = async (state) => {
             Content: ${item.content}`
     ).join("\n\n ------- \n\n");
 
-    const prompt = `You are a professional assistant for the novel "Demi-Gods and Semi-Devils". Answer questions based on the novel's content using accurate and detailed language.
+    const prompt = `你是一个专业的《天龙八部》小说助手。请根据小说内容，用准确、详细的中文回答问题。
 
-        Please answer the question based on the following excerpts from "Demi-Gods and Semi-Devils":
+        请根据以下《天龙八部》小说片段内容回答问题：
         ${context}
 
-        User Question: ${question}
+        用户问题：${question}
 
-        Requirements:
-        1. If the excerpts contain relevant information, provide a detailed and accurate answer combining the novel's content.
-        2. You can synthesize content from multiple excerpts to provide a complete answer.
-        3. If the excerpts do not contain relevant information, inform the user truthfully.
-        4. The answer must be accurate and consistent with the novel's plot and character settings.
-        5. You may quote the original text to support your answer.
+        回答要求：
+        1. 必须使用中文回答。
+        2. 如果片段中有相关信息，请结合小说内容给出详细、准确的回答。
+        3. 可以综合多个片段的内容，提供完整的答案。
+        4. 如果片段中没有相关信息，请如实告知用户。
+        5. 回答要准确，符合小说的情节和人物设定。
+        6. 可以引用原文内容来支持你的回答。
 
-        AI Assistant's Answer:`;
+        AI 助手的回答：`;
     
     process.stdout.write(`\n[AI stream response]\n`);
 

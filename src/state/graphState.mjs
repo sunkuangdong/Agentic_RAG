@@ -1,5 +1,4 @@
 import { Annotation } from "@langchain/langgraph";
-import { retrieveNode } from "../nodes/ragNodes.mjs";
 
 export const GraphState = Annotation.Root({
     question: Annotation,
@@ -7,13 +6,13 @@ export const GraphState = Annotation.Root({
     strategy: Annotation,
     routeReason: Annotation,
     // Decomposed sub-questions, only used for retrieval
-    subQuestion: Annotation,
+    subQuestions: Annotation,
     // Index of the next sub-question to process
     nextSubIdx: Annotation,
     documents: Annotation,
     currentQuery: Annotation,
-    retrieveCount: Annotation,
-    maxRetrieves: Annotation,
+    retrievalCount: Annotation,
+    maxRetrievals: Annotation,
     plannedNext: Annotation,
     generation: Annotation,
 });
